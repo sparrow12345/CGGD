@@ -1,11 +1,11 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 
 #include "model.h"
-#include <iostream>
+
 #include "utils/error_handler.h"
 
 #include <linalg.h>
-
+#include <iostream>
 
 using namespace linalg::aliases;
 using namespace cg::world;
@@ -21,20 +21,19 @@ void cg::world::model::load_obj(const std::filesystem::path& model_path)
 	readerConfig.triangulate = true;
 
 	tinyobj::ObjReader reader;
-	if (!reader.ParseFromFile(model_path.string(), readerConfig))
+	if (!reader.ParseFromFile(model_path.string(),readerConfig))
 	{
 		if (!reader.Error().empty())
 		{
 			THROW_ERROR(reader.Error());
 		}
 	}
-
 	auto &shapes = reader.GetShapes();
 	auto &attrib = reader.GetAttrib();
 	auto &materials = reader.GetMaterials();
 
 	allocate_buffers(shapes);
-	fill_buffers(shapes, attrib, materials, model_path.parent_path());
+	fill_buffers(shapes,attrib,materials,model_path.parent_path());
 }
 
 void model::allocate_buffers(const std::vector<tinyobj::shape_t>& shapes)
@@ -43,21 +42,17 @@ void model::allocate_buffers(const std::vector<tinyobj::shape_t>& shapes)
 	for (const auto& shape : shapes)
 	{
 		size_t index_offset = 0;
-		unsigned int vertex_buffer_size = 0 ;
-		unsigned int index_buffer_size = 0;
-		std::map<std::tuple<int, int, int>, unsigned int> index_map;
+		unsigned int vertex_buffer_size=0;
+		unsigned int index_buffer_size=0;
+		std::map<std::tuple<int,int,int>,unsigned int> index_map;
 		const auto& mesh = shape.mesh;
 
 		for (const auto& fv : mesh.num_face_vertices)
 		{
-			for (size_t v = 0; v < fv; v++)
+			for (size_t i = 0; i < fv; i++)
 			{
-				tinyobj::index_t idx = mesh.indices[index_offset + v];
-				auto idx_tuple = std::make_tuple(
-						idx.vertex_index,
-						idx.normal_index,
-						idx.texcoord_index
-				);
+				tinyobj::index_t idx = mesh.indices[index_offset + i];
+				auto idx_tuple = std::make_tuple(idx.vertex_index, idx.normal_index, idx.texcoord_index);
 				if (index_map.count(idx_tuple) == 0)
 				{
 					index_map[idx_tuple] = vertex_buffer_size;
@@ -68,30 +63,29 @@ void model::allocate_buffers(const std::vector<tinyobj::shape_t>& shapes)
 			}
 			index_offset += fv;
 		}
-		vertex_buffers.push_back(
-				std::make_shared<cg::resource<cg::vertex>>(
-						vertex_buffer_size));
-		index_buffers.push_back(
-				std::make_shared<cg::resource<unsigned int>>(
-						index_buffer_size));
+		vertex_buffers.push_back(std::make_shared<cg::resource<cg::vertex>>(vertex_buffer_size));
+		index_buffers.push_back(std::make_shared<cg::resource<unsigned int>>(index_buffer_size));
 	}
 	textures.resize(shapes.size());
+	size_t vertex_num = 0;
+	size_t vertex_size =0;
+	for (const auto& vb : vertex_buffers)
+	{
+		vertex_num += vb->get_number_of_elements();
+		vertex_size += vb->get_size_in_bytes();
+	}
 
-	size_t vertex_num=0;
-	size_t vertex_size=0;
-	for (const auto& vb : vertex_buffers) {
-		vertex_num += vb -> get_number_of_elements();
-		vertex_size += vb -> get_size_in_bytes();
+	size_t index_num = 0;
+	size_t index_size = 0;
+	for (const auto& ib : index_buffers)
+	{
+		index_num += ib->get_number_of_elements();
+		index_size += ib->get_size_in_bytes();
 	}
-	size_t index_num=0;
-	size_t index_size=0;
-	for (const auto& ib : index_buffers) {
-		index_num += ib -> get_number_of_elements();
-		index_size += ib -> get_size_in_bytes();
-	}
-	std::cout << "Num of Vertices " << vertex_num << " Size " << vertex_size << "\n";
-	std::cout << "Num of indices " << index_num << " Size " << index_size << "\n";
-	std::cout << "Num of Vertices without indices " << unindexed_vertex_num << " Size " << unindexed_vertex_num * sizeof(cg::vertex) << "\n";
+
+	std::cout << "Vertex num: " << vertex_num << " Memory: " << vertex_size << std::endl;
+	std::cout << "Index num: " << index_num << " Memory:" << index_size << std::endl;
+	std::cout << "Unindexed vertex num: " << unindexed_vertex_num << " Memory:" << unindexed_vertex_num * sizeof(cg::vertex) << std::endl;
 }
 
 float3 cg::world::model::compute_normal(const tinyobj::attrib_t& attrib, const tinyobj::mesh_t& mesh, size_t index_offset)
@@ -100,19 +94,19 @@ float3 cg::world::model::compute_normal(const tinyobj::attrib_t& attrib, const t
 	auto b_id = mesh.indices[index_offset + 1];
 	auto c_id = mesh.indices[index_offset + 2];
 
-	float3 a{
-			attrib.vertices[3 * a_id.vertex_index],
-			attrib.vertices[3 * a_id.vertex_index + 1],
-			attrib.vertices[3 * a_id.vertex_index + 2]
+	float3 a {
+		attrib.vertices[3 * a_id.vertex_index],
+		attrib.vertices[3 * a_id.vertex_index + 1],
+		attrib.vertices[3 * a_id.vertex_index + 2]
 	};
 
-	float3 b{
+	float3 b {
 			attrib.vertices[3 * b_id.vertex_index],
 			attrib.vertices[3 * b_id.vertex_index + 1],
 			attrib.vertices[3 * b_id.vertex_index + 2]
 	};
 
-	float3 c{
+	float3 c {
 			attrib.vertices[3 * c_id.vertex_index],
 			attrib.vertices[3 * c_id.vertex_index + 1],
 			attrib.vertices[3 * c_id.vertex_index + 2]
@@ -135,12 +129,13 @@ void model::fill_vertex_data(cg::vertex& vertex, const tinyobj::attrib_t& attrib
 	}
 	else
 	{
-		vertex.nx = attrib.vertices[3 * idx.normal_index];
-		vertex.ny = attrib.vertices[3 * idx.normal_index + 1];
-		vertex.nz = attrib.vertices[3 * idx.normal_index + 2];
+		vertex.nx = attrib.normals[3 * idx.normal_index];
+		vertex.ny = attrib.normals[3 * idx.normal_index + 1];
+		vertex.nz = attrib.normals[3 * idx.normal_index + 2];
 	}
-	vertex.u = idx.texcoord_index >=0 ? attrib.texcoords[2 * idx.texcoord_index] : 0.f;
-	vertex.v = idx.texcoord_index >=0 ? attrib.texcoords[2 * idx.texcoord_index + 1] : 0.f;
+
+	vertex.u = idx.texcoord_index >= 0 ? attrib.texcoords[2 * idx.texcoord_index] : 0.0f;
+	vertex.v = idx.texcoord_index >= 0 ? attrib.texcoords[2 * idx.texcoord_index + 1] : 0.0f;
 
 	vertex.ambient_r = material.ambient[0];
 	vertex.ambient_g = material.ambient[1];
@@ -166,29 +161,27 @@ void model::fill_buffers(const std::vector<tinyobj::shape_t>& shapes, const tiny
 
 		auto vertex_buffer = vertex_buffers[s];
 		auto index_buffer = index_buffers[s];
-		std::map<std::tuple<int, int, int>, unsigned int> index_map;
+		std::map<std::tuple<int,int,int>,unsigned int> index_map;
 		const auto& mesh = shapes[s].mesh;
 
-		for (size_t f = 0; f < mesh.num_face_vertices.size(); f++)
+		for(size_t f = 0; f < mesh.num_face_vertices.size(); f++)
 		{
 			int fv = mesh.num_face_vertices[f];
 			float3 normal;
+
 			if (mesh.indices[index_offset].normal_index < 0)
+			{
 				normal = compute_normal(attrib, mesh, index_offset);
+			}
 
 			for (size_t v = 0; v < fv; v++)
 			{
 				tinyobj::index_t idx = mesh.indices[index_offset + v];
-				auto idx_tuple = std::make_tuple(
-						idx.vertex_index,
-						idx.normal_index,
-						idx.texcoord_index
-				);
+				auto idx_tuple = std::make_tuple(idx.vertex_index, idx.normal_index, idx.texcoord_index);
 				if (index_map.count(idx_tuple) == 0)
 				{
 					cg::vertex& vertex = vertex_buffer->item(vertex_buffer_id);
 					const auto& material = materials[mesh.material_ids[f]];
-
 					fill_vertex_data(vertex, attrib, idx, normal, material);
 
 					index_map[idx_tuple] = vertex_buffer_id;
@@ -199,13 +192,13 @@ void model::fill_buffers(const std::vector<tinyobj::shape_t>& shapes, const tiny
 			}
 			index_offset += fv;
 		}
-		if (!materials[mesh.material_ids[0]].diffuse_texname.empty())
+
+		if(!materials[mesh.material_ids[0]].diffuse_texname.empty())
 		{
 			textures[s] = base_folder / materials[mesh.material_ids[0]].diffuse_texname;
 		}
 	}
 }
-
 
 const std::vector<std::shared_ptr<cg::resource<cg::vertex>>>&
 cg::world::model::get_vertex_buffers() const
@@ -224,12 +217,11 @@ const std::vector<std::filesystem::path>& cg::world::model::get_per_shape_textur
 	return textures;
 }
 
-
 const float4x4 cg::world::model::get_world_matrix() const
 {
 	return float4x4{
-			{1, 0, 0, 0},
-			{0, 1, 0, 0},
-			{0, 0, 1, 0},
-			{0, 0, 0, 1}};
+			{1., 0., 0., 0.},
+			{0., 1., 0., 0.},
+			{0., 0., 1., 0.},
+			{0., 0., 0., 1.}};
 }
